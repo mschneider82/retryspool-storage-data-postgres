@@ -1,18 +1,19 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
-	
-	datastorage "schneider.vip/retryspool/storage/data"
+
 	_ "github.com/lib/pq" // PostgreSQL driver
+	datastorage "schneider.vip/retryspool/storage/data"
 )
 
 // Factory creates PostgreSQL data storage backends
 type Factory struct {
-	dsn           string
-	tableName     string
-	maxOpenConns  int
-	maxIdleConns  int
+	dsn          string
+	tableName    string
+	maxOpenConns int
+	maxIdleConns int
 }
 
 // NewFactory creates a new PostgreSQL data storage factory
@@ -60,8 +61,8 @@ func (f *Factory) Create() (datastorage.Backend, error) {
 		tableName: f.tableName,
 	}
 
-	// Create table if it doesn't exist
-	if err := backend.createTable(); err != nil {
+	// Create table if it doesn't exist (use context for setup)
+	if err := backend.createTable(context.Background()); err != nil {
 		db.Close()
 		return nil, err
 	}

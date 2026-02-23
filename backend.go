@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -15,7 +16,7 @@ type Backend struct {
 }
 
 // createTable creates the data table if it doesn't exist
-func (b *Backend) createTable() error {
+func (b *Backend) createTable(ctx context.Context) error {
 	query := fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS %s (
 		message_id VARCHAR(255) PRIMARY KEY,
@@ -34,7 +35,7 @@ func (b *Backend) createTable() error {
 		b.tableName, b.tableName,
 	)
 
-	_, err := b.db.Exec(query)
+	_, err := b.db.ExecContext(ctx, query)
 	return err
 }
 
@@ -69,7 +70,7 @@ func (b *Backend) StoreData(ctx context.Context, messageID string, data io.Reade
 // GetDataReader returns a reader for message data
 func (b *Backend) GetDataReader(ctx context.Context, messageID string) (io.ReadCloser, error) {
 	query := fmt.Sprintf(`SELECT data FROM %s WHERE message_id = $1`, b.tableName)
-	
+
 	var data []byte
 	row := b.db.QueryRowContext(ctx, query, messageID)
 	err := row.Scan(&data)
@@ -80,27 +81,7 @@ func (b *Backend) GetDataReader(ctx context.Context, messageID string) (io.ReadC
 		return nil, fmt.Errorf("failed to get data for message %s: %w", messageID, err)
 	}
 
-	return &bytesReadCloser{data: data}, nil
-}
-
-// bytesReadCloser wraps byte slice as ReadCloser
-type bytesReadCloser struct {
-	data   []byte
-	offset int
-}
-
-func (brc *bytesReadCloser) Read(p []byte) (n int, err error) {
-	if brc.offset >= len(brc.data) {
-		return 0, io.EOF
-	}
-	
-	n = copy(p, brc.data[brc.offset:])
-	brc.offset += n
-	return n, nil
-}
-
-func (brc *bytesReadCloser) Close() error {
-	return nil
+	return io.NopCloser(bytes.NewReader(data)), nil
 }
 
 // GetDataWriter returns a writer for message data
@@ -126,7 +107,7 @@ func (pdw *postgresDataWriter) Write(p []byte) (int, error) {
 	if pdw.closed {
 		return 0, fmt.Errorf("writer is closed")
 	}
-	
+
 	pdw.buffer = append(pdw.buffer, p...)
 	return len(p), nil
 }
@@ -135,9 +116,9 @@ func (pdw *postgresDataWriter) Close() error {
 	if pdw.closed {
 		return nil
 	}
-	
+
 	pdw.closed = true
-	
+
 	if len(pdw.buffer) == 0 {
 		return nil
 	}
@@ -165,7 +146,7 @@ func (pdw *postgresDataWriter) Close() error {
 // DeleteData removes message data
 func (b *Backend) DeleteData(ctx context.Context, messageID string) error {
 	query := fmt.Sprintf(`DELETE FROM %s WHERE message_id = $1`, b.tableName)
-	
+
 	result, err := b.db.ExecContext(ctx, query, messageID)
 	if err != nil {
 		return fmt.Errorf("failed to delete data for message %s: %w", messageID, err)
