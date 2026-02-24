@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	datastorage "schneider.vip/retryspool/storage/data"
 )
 
 // Backend implements PostgreSQL data storage
@@ -76,7 +78,7 @@ func (b *Backend) GetDataReader(ctx context.Context, messageID string) (io.ReadC
 	err := row.Scan(&data)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("data for message %s not found", messageID)
+			return nil, fmt.Errorf("%w: %s", datastorage.ErrDataNotFound, messageID)
 		}
 		return nil, fmt.Errorf("failed to get data for message %s: %w", messageID, err)
 	}
